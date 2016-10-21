@@ -57,7 +57,8 @@ document {
 	  LoadDocumentation => Boolean => {"whether to load the documentation of the package, too; see ", TO "beginDocumentation"},
 	  DebuggingMode => Boolean => {
 	       "the value of ", TO "debuggingMode", " during loading the package; specifying it here overrides the 
-	       value specified as an option to ", TO "newPackage", " by the package itself"
+	       value specified as an option to ", TO "newPackage", " by the package itself; however, if ", TO "debuggingMode", " 
+	       is already ", TT "false", ", it will remain so."
 	       },
 	  Configuration => List => {"a list of options ", TT "KEY => VALUE", ", overriding the defaults specified in 
 	       the source code of the package and the (possibly updated) values in the file in the user's application
@@ -77,6 +78,31 @@ document {
 	  },
      SeeAlso => {"packages", "an example of a package", needsPackage, load }
      }
+document {
+     Key => {(loadPackage,Package)},
+     Headline => "reload an already loaded package",
+     Usage => "loadPackage PACKAGE",
+     Inputs => {
+       "PACKAGE" => "the already loaded package"
+     },
+     Outputs => { Package => "the package just reloaded" },
+     Consequences => {{"Reloads the package PACKAGE"}},
+     PARA { "This reloads a package. ",
+       "The package ", TT "PACKAGE", " should already have been loaded at an earlier step, ",
+       "using a command such as ", TT "loadPackage(\"PACKAGE\")", " or ",
+       TT "needsPackage(\"PACKAGE\")", ", i.e., using the name of the package ",
+       "as a string. If that has been done, then this command will reload the package."},
+     PARA { "In fact this version of the command is simply a convenient short form ",
+     "of ", TT "loadPackage", " with the option ", TT "Reload", " set to ",
+     TT "true", ". All options of ", TT "loadPackage", " (other than ", TT "Reload",
+     ") are available." },
+     EXAMPLE lines ///
+       loadPackage "FirstPackage"
+       loadPackage FirstPackage
+     ///,
+     SeeAlso => {loadPackage, needsPackage}
+     }
+       
 document {
      Key => {(needsPackage,String),needsPackage,
 	  [needsPackage, LoadDocumentation],[needsPackage,Configuration],[needsPackage,DebuggingMode],[needsPackage,FileName]},
@@ -134,37 +160,51 @@ document {
      SeeAlso => {"packages"}
      }
 
+undocumented (export,Symbol)
+
 document {
-     Key => {export, (export,List), (export,Symbol), (export,String)},
+     Key => {export, (export,List), (export,String)},
      Headline => "package item: export functions",
      Usage => "export {symbol1,symbol2,...}",
-     Inputs => { { TT "{symbol1,symbol2,...}", ", a list of symbols, strings, or options" } },
+     Inputs => { { TT "{symbol1,symbol2,...}", ", a list of strings or options" } },
      Outputs => {List => "the list of exported symbols"},
-     Consequences => {{"The symbols in the list, which should refer
+     Consequences => {{"The symbols whose names are in the list as strings, which should refer
 	  to functions or other symbols defined in the package, are made available 
 	  to the user of the package, and are marked non-mutable.  The strings are converted to symbols
-	  with those names in the dictionary of the package.  An option of the form ", TT "\"nam\" => sym", "
-	  creates a symbol with the name ", TT "\"nam\"", " that is a synonym of the symbol", TT "\"nam\" => sym", "."
+	  with those names in the dictionary of the package.  An option of the form ", TT "\"nam\" => \"sym\"", "
+	  creates a symbol with the name ", TT "nam", " that is a synonym of the symbol", TT "sym", "."
 	  }},
-     "A package can contain the code for many functions, only some 
-     of which should be made visible to the user.  The function ", TT "export", " 
-     allows one to specify which symbols are to be made visible.
-     For an example see ", TO "an example of a package", ".",
+     PARA {
+	  "A package can contain the code for many functions, only some 
+	  of which should be made visible to the user.  The function ", TT "export", " 
+	  allows one to specify which symbols are to be made visible.
+	  For an example see ", TO "an example of a package", "."
+	  },
+     PARA {
+	  "No single-letter symbol should be exported, as such symbols are reserved as variables for the user."
+	  },
      PARA{ "Use ", TO exportMutable, " to export symbols whose values the user is permitted to modify." },
      SeeAlso => {debug}
      }
 
+undocumented (exportMutable,Symbol)
+
 document {
-     Key => {exportMutable, (exportMutable,List), (exportMutable,Symbol)},
+     Key => {exportMutable, (exportMutable,List), (exportMutable,String)},
      Headline => "package item: export writable variables",
      Usage => "exportMutable(symbol1,symbol2,...)",
-     Inputs => { Nothing => { TT "(symbol1,symbol2,...)", ", a sequence of symbols"  } },
+     Inputs => { Nothing => { TT "(symbol1,symbol2,...)", ", a sequence of strings interpreted as names of symbols"  } },
      Outputs => {List => "the list of exported symbols"},
      Consequences => {
-	  {"the symbols in the sequence, which should refer to variables defined in the package,
+	  {"the names of symbols in the sequence, which should refer to variables defined in the package,
 	       are made available to the user of the package, in such a way that their values may be modified by the user"}
 	 },
-     "This function is needed much less frequently than ", TO export, ".  For an example, see ", TO "an example of a package",
+     PARA {
+     	  "This function is needed much less frequently than ", TO export, ".  For an example, see ", TO "an example of a package"
+	  },
+     PARA {
+	  "No single-letter symbol should be exported, as such symbols are reserved as variables for the user."
+	  },
      SeeAlso => {export, debug}
      }
 
@@ -226,7 +266,8 @@ document {
 	       ", TT "Name => x", ", ", TT "Email => x", ", or ", TT "HomePage => x", ", where ", TT "x", " is a string."
 	       },
 	  HomePage => String => "the URI pointing to the home page of the package, if any",
-	  DebuggingMode => Boolean => {"whether ", TO "debuggingMode", " should be true during package loading"},
+	  DebuggingMode => Boolean => {"whether ", TO "debuggingMode", " should be true during package loading.  However, if ", TO "debuggingMode", " 
+	       is already ", TT "false", ", it will remain so."},
           AuxiliaryFiles => Boolean => {"whether the package source to be distributed includes a directory for
 	       auxiliary files, with the same name as the package"},
 	  PackageExports => List => {"a list of names of other packages to load, both for the user and for the code of the new package"},

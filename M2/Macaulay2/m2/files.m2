@@ -192,14 +192,17 @@ String << Thing := File => (filename,x) -> (
 
 temporaryDirectoryName = null
 temporaryDirectoryCounter = 0
+-- Track the process ID: if we fork, then the child should (lazily) get a new temp dir and not clean up the parent's temp dir
+temporaryDirectoryProcessID = -1
 temporaryFilenameCounter = 0
 addStartFunction( () -> (
 	  temporaryDirectoryCounter = 0;
 	  temporaryFilenameCounter = 0;
 	  temporaryDirectoryName = null;
+	  temporaryDirectoryProcessID = -1;
 	  ))
 addEndFunction( () -> (
-	  if temporaryDirectoryName =!= null 
+	  if (temporaryDirectoryName =!= null and temporaryDirectoryProcessID === processID())
 	  then scan(reverse findFiles temporaryDirectoryName, 
 	       fn -> (
 		    if isDirectory fn then (
@@ -212,7 +215,7 @@ addEndFunction( () -> (
 			 )))))
 
 temporaryDirectory = () -> (
-     if temporaryDirectoryName === null 
+     if (temporaryDirectoryName === null or temporaryDirectoryProcessID =!= processID())
      then temporaryDirectoryName = (
 	  tmp := (
 	       if getenv "TMPDIR" === ""
@@ -223,8 +226,9 @@ temporaryDirectory = () -> (
 	  if not isDirectory tmp then error("expected a directory: ", tmp);
 	  if not fileExecutable tmp then error("expected a executable directory: ", tmp);
 	  if not fileWritable tmp then error("expected a writable directory: ", tmp);
+	  temporaryDirectoryProcessID=processID();
 	  while true do (
-	       fn := tmp | "M2-" | toString processID() | "-" | toString temporaryDirectoryCounter | "/";
+	       fn := tmp | "M2-" | toString temporaryDirectoryProcessID | "-" | toString temporaryDirectoryCounter | "/";
 	       temporaryDirectoryCounter = temporaryDirectoryCounter + 1;
 	       try mkdir fn else continue;
 	       break fn
@@ -378,6 +382,12 @@ emacstempl := ///
      (setq VAR (cons "/PREFIX/DIR" VAR)))
 ///
 
+emacsenvtempl := ///
+;; add "/PREFIX/DIR" to VAR if it isn't there
+(if (not (string-match "/PREFIX/DIR" (getenv "VAR")))
+     (setenv "VAR" "/PREFIX/DIR:$VAR" t))
+///
+
 dotemacsFix0 = ///
 ;; this version will give an error if M2-init.el is not found:
 (load "M2-init")
@@ -429,9 +439,11 @@ shellfixes := {
      ("INFOPATH", currentLayout#"info",""),
      ("LD_LIBRARY_PATH", currentLayout#"lib","")}
 emacsfixes := {
-     ("load-path", currentLayout#"emacs"),
-     ("exec-path", currentLayout#"bin"),
-     ("Info-default-directory-list", currentLayout#"info")}
+     ("load-path", currentLayout#"emacs", emacstempl),
+     -- the exec-path fix is not needed, because we exec the shell and ask it to find M2
+     -- ("exec-path", currentLayout#"bin", emacstempl),
+     ("Info-default-directory-list", currentLayout#"info", emacstempl),
+     ("PATH", currentLayout#"bin", emacsenvtempl)}
 
 stripdir := dir -> if dir === "/" then dir else replace("/$","",dir)
 fix := (var,dir,rest,templ) -> replace_(":REST",rest) replace_("VAR",var) replace_("DIR",stripdir dir) templ
@@ -460,7 +472,7 @@ local dotemacsFix
 setupEmacs = method()
 setup = method()
 mungeEmacs = () -> (
-     dotemacsFix = concatenate(emacsHeader, apply(emacsfixes, (var,dir) -> fix(var,dir,"",emacstempl)), dotemacsFix0);
+     dotemacsFix = concatenate(emacsHeader, apply(emacsfixes, (var,dir,templ) -> fix(var,dir,"",templ)), dotemacsFix0);
      supplantStringFile(dotemacsFix,"~/"|M2emacs,false);
      mungeFile("~/"|".emacs", ";; Macaulay 2 start", ";; Macaulay 2 end", M2emacsRead )
      )

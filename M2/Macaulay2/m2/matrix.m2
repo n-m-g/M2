@@ -74,6 +74,8 @@ Number * Matrix := (r,m) -> (
      S := ring m;
      try r = promote(r,S) else error "can't promote scalar to ring of matrix";
      map(target m, source m, reduce(target m, raw r * raw m)))
+InfiniteNumber * Matrix := (r,m) -> (map(target m, source m, matrix(r*(entries m))))
+Matrix * InfiniteNumber := (m,r) -> r*m
 RingElement * Matrix := (r,m) -> (
      r = promote(r,ring m);
      map(target m, source m, reduce(target m, raw r * raw m)))
@@ -164,8 +166,10 @@ Matrix * Matrix := Matrix => (m,n) -> (
 	  then error "maps not composable";
 	  dif := degrees P - degrees Q;
 	  deg := (
-	       if same dif
-	       then (degree m + degree n + dif#0)
+	       if #dif === 0
+	       then degree m + degree n
+	       else if same dif
+	       then degree m + degree n + dif#0
  	       else toList (degreeLength R:0)
 	       );
 	  f := m.RawMatrix * n.RawMatrix;
@@ -389,6 +393,42 @@ submatrix'(Matrix,VisibleList            ) := (m,cols     ) -> if #cols === 0 th
 submatrix'(Matrix,Nothing    ,VisibleList) := (m,null,cols) -> if #cols === 0 then m else submatrix'(m,cols)
 submatrix'(Matrix,VisibleList,Nothing    ) := (m,rows,null) -> if #rows === 0 then m else submatrix(m,compl(numgens target m,listZ toList splice rows),)
 
+submatrixByDegrees = method()
+submatrixByDegrees(Matrix, Sequence, Sequence) := (m, tarBox, srcBox) -> (
+    -- tarBox should be a sequence e.g. ({1},{4}), or ({1,2,3},{1,3,4}), or (, {1}) or ({1}, )
+    -- each null is same as {}, meaning either no lower bound, or no higher bound.
+    -- a list of length 1 is the same as an integer: e.g. ({1}, {4}) is same as (1,4).
+    -- first: check both source and target are free modules
+    -- check: length of lodegree (resp hidegree) is 0 or same as degree rank
+    (tarL, tarH) := tarBox;
+    (srcL, srcH) := srcBox;
+    if tarL === null then tarL = {};
+    if tarH === null then tarH = {};
+    if srcL === null then srcL = {};
+    if srcH === null then srcH = {};
+    if instance(tarL, ZZ) then tarL = {tarL};
+    if instance(tarH, ZZ) then tarH = {tarH};
+    if instance(srcL, ZZ) then srcL = {srcL};
+    if instance(srcH, ZZ) then srcH = {srcH};
+    ndegs := numgens degreesRing ring m;
+    if (#tarL > 0 and #tarL != ndegs)
+      or
+       (#tarH > 0 and #tarH != ndegs)
+      or 
+       (#srcL > 0 and #srcL != ndegs)
+      or
+       (#srcH > 0 and #srcH != ndegs)
+       then error ("expected degree vector of length "|ndegs);
+    tar := target m;
+    src := source m;
+    if not isFreeModule tar or not isFreeModule src then error "expected a matrix between free modules";
+    ptar := rawSelectByDegrees(raw tar, tarL, tarH);
+    psrc := rawSelectByDegrees(raw src, srcL, srcH);
+    submatrix(m, ptar, psrc)
+    )
+submatrixByDegrees(Matrix, ZZ, ZZ) := (m, lo, hi) -> submatrixByDegrees(m, ({lo},{lo}), ({hi},{hi}))
+submatrixByDegrees(Matrix, List, List) := (m, lo, hi) -> submatrixByDegrees(m, (lo,lo), (hi,hi))
+
 bothFree := (f,g) -> (
      if not isFreeModule source f or not isFreeModule target f
      or not isFreeModule source g or not isFreeModule target g then error "expected a homomorphism between free modules"
@@ -542,26 +582,29 @@ inducedMap = method (
 	  Verify => true,
 	  Degree => null 
 	  })
-inducedMap(Module,Module,Matrix) := Matrix => options -> (M,N,f) -> (
-     sM := target f;
-     sN := source f;
-     if ring M =!= ring N or ring M =!= ring f then error "inducedMap: expected modules and map over the same ring";
-     if isFreeModule sM and isFreeModule sN and (sM =!= ambient M and rank sM === rank ambient M or sN =!= ambient N and rank sN === rank ambient N)
-     then f = map(sM = ambient M, sN = ambient N, f)
+inducedMap(Module,Module,Matrix) := Matrix => opts -> (N',M',f) -> (
+     N := target f;
+     M := source f;
+     if ring N' =!= ring M' or ring N' =!= ring f then error "inducedMap: expected modules and map over the same ring";
+     if isFreeModule N and isFreeModule M and (N =!= ambient N' and rank N === rank ambient N' or M =!= ambient M' and rank M === rank ambient M')
+     then f = map(N = ambient N', M = ambient M', f)
      else (
-     	  if ambient M =!= ambient sM then error "inducedMap: expected new target and target of map provided to be subquotients of same free module";
-     	  if ambient N =!= ambient sN then error "inducedMap: expected new source and source of map provided to be subquotients of same free module";
+     	  if ambient N' =!= ambient N then error "inducedMap: expected new target and target of map provided to be subquotients of same free module";
+     	  if ambient M' =!= ambient M then error "inducedMap: expected new source and source of map provided to be subquotients of same free module";
 	  );
-     g := generators sM * cover f * (generators N // generators sN);
-     h := generators M;
-     p := map(M, N, g // h, Degree => options.Degree);
-     if options.Verify then (
-	  if relations sM % relations M != 0 then error "inducedMap: expected new target not to have fewer relations";
-	  if generators N % generators sN != 0 then error "inducedMap: expected new source not to have more generators";
-	  if g % h != 0 then error "inducedMap: expected matrix to induce a map";
-	  if not isWellDefined p then error "inducedMap: expected matrix to induce a well-defined map";
+     gbM  := gb(M,ChangeMatrix => true);
+     gbN' := gb(N',ChangeMatrix => true);
+     g := generators N * cover f * (generators M' // gbM);
+     f' := g // gbN';
+     f' = map(N',M',f',Degree => if opts.Degree === null then degree f else opts.Degree);
+     if opts.Verify then (
+	  if relations M % relations M' != 0 then error "inducedMap: expected new source not to have fewer relations";
+	  if relations N % relations N' != 0 then error "inducedMap: expected new target not to have fewer relations";
+	  if generators M' % gbM != 0 then error "inducedMap: expected new source not to have more generators";
+	  if g % gbN' != 0 then error "inducedMap: expected matrix to induce a map";
+	  if not isWellDefined f' then error "inducedMap: expected matrix to induce a well-defined map";
 	  );
-     p)
+     f')
 inducedMap(Module,Nothing,Matrix) := o -> (M,N,f) -> inducedMap(M,source f, f,o)
 inducedMap(Nothing,Module,Matrix) := o -> (M,N,f) -> inducedMap(target f,N, f,o)
 inducedMap(Nothing,Nothing,Matrix) := o -> (M,N,f) -> inducedMap(target f,source f, f,o)

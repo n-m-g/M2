@@ -120,6 +120,23 @@ res_comp::res_comp(const Matrix *m,
   initialize(m, LengthLimit, strategy);
 }
 
+res_comp::~res_comp()
+{
+  int i;
+  for (i=0; i<resn.length(); i++)
+    remove_res_level(resn[i]);
+
+  for (i=0; i<search_mi.length(); i++)
+    delete search_mi[i];
+
+  delete res_pair_stash;
+  delete mi_stash;
+  delete R;
+
+  // base_components have all been removed by this point
+  // Since they appear in resn[0].
+}
+
 void res_comp::remove_res_pair(res_pair *p)
 {
   if (p == NULL) return;
@@ -152,23 +169,6 @@ void res_comp::remove_res_level(res_level *lev)
       remove_res_degree(mypairs);
     }
   deleteitem(lev);
-}
-
-void res_comp::remove_res()
-{
-  int i;
-  for (i=0; i<resn.length(); i++)
-    remove_res_level(resn[i]);
-
-  for (i=0; i<search_mi.length(); i++)
-    delete search_mi[i];
-
-  delete res_pair_stash;
-  delete mi_stash;
-  delete R;
-
-  // base_components have all been removed by this point
-  // Since they appear in resn[0].
 }
 
 //////////////////////////////////////////////
@@ -738,14 +738,14 @@ resterm *res_comp::s_pair(res_pair *p) const
     // returns this value multiplied out.
     // Care is of course taken with the Schreyer order
 {
-  p->syz = R->new_term(K->from_int(1), p->base_monom, p->first);
+  p->syz = R->new_term(K->from_long(1), p->base_monom, p->first);
   int *si = M->make_one();
   M->divide(p->base_monom, p->first->base_monom, si);
   resterm *result = R->mult_by_monomial(p->first->syz, si);
-  ring_elem one = K->from_int(1);
+  ring_elem one = K->from_long(1);
   if (p->second != NULL)
     {
-      p->syz->next = R->new_term(K->from_int(-1), p->base_monom, p->second);
+      p->syz->next = R->new_term(K->from_long(-1), p->base_monom, p->second);
       M->divide(p->base_monom, p->second->base_monom, si);
       R->subtract_multiple_to(result, one, si, p->second->syz);
     }
@@ -1221,6 +1221,9 @@ M2_arrayint res_comp::get_betti(int type) const
         case 3:
           val = n_monoms(lev,d);
           break;
+        case 4:
+          ERROR("cannot use Minimize=>true unless res(...,FastNonminimal=>true) was used");
+          return 0;
         default:
           val = -1;
           break;

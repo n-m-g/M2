@@ -6,10 +6,6 @@
 static int allocated_amount = 0;
 static int deleted_amount = 0;
 
-
-
-const int trace_bad_deletes = 0;
-
 int slab::n_slabs = 0;
 
 //Array of stashes of 2^n powers.
@@ -119,12 +115,14 @@ void stash::stats(buffer &o)
 //  o << "number of global delete's  = " << engine_dealloc << endl;
   int n = (slab::n_slabs*slab_size)/1024 +
     (allocated_amount - deleted_amount)/1024;
-  o << "size of each slabs = " << sizeof(slab) << newline;
-  o << "total engine space allocated = "
+  o << "size of each slab = " << sizeof(slab) << newline;
+  o << "total engine stash space allocated = "
     << n << "k" << newline;
 
-  char s[200];
-  sprintf(s, "%16s %10s %10s %10s %10s %10s %10s %10s%s",
+  if (n > 0)
+    {
+      char s[200];
+      sprintf(s, "%16s %10s %10s %10s %10s %10s %10s %10s%s",
           "stash",
           "k total",
           "k in use",
@@ -134,7 +132,9 @@ void stash::stats(buffer &o)
           "highwater",
           "freed",
           newline);
-  o << s;
+      o << s;
+
+    }
 
   /*  for (stash *p = stash_list; p != NULL; p = p->next)
     //    if (p->n_allocs > 0)

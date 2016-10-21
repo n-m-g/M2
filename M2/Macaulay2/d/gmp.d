@@ -1,18 +1,27 @@
-
-declarations "
-    #include <math.h>
-    #include <gmp.h>
-    #include <mpfr.h>
-";
-
-header "#include \"gmp_aux.h\"";
-
-
 --This file contains gmp declarations and elementary functions.
 --Functions in this file should not need to make calls to stdio.
 
 use arithmetic;
 use stdiop0;
+
+declarations "
+    #include <math.h>
+    #ifdef HAVE_STDINT_H
+      /* This prevents a problem with mpir.h and mpirxx.h, that arises when stdint.h is loaded
+	 after mpir.h is but before mpirxx.h is.  Solution: load it first.  We load it
+	 here, just before loading gmp.h, which, for us, is just a link to mpir.h. */
+      #define __STDC_LIMIT_MACROS
+      #include <stdint.h>
+    #endif
+    #ifdef HAVE_STDDEF_H
+      /* this prevents a problem in Mac OS X, where 'cstddef' is loaded before 'stddef.h', and it causes a problem */
+      #include <stddef.h>
+    #endif
+    #include <gmp.h>
+    #include <mpfr.h>
+";
+
+header "#include \"gmp_aux.h\"";
 
 export ZZstruct := Type "__mpz_struct";
 export ZZ := Pointer "__mpz_struct *";
@@ -613,6 +622,7 @@ isNegative0(x:RR) ::= -1 == Ccode(int, "mpfr_sgn(", x, ")");
 isZero0    (x:RR) ::=  0 == Ccode(int, "mpfr_sgn(", x, ")");
 
 flagged0() ::= 0 != Ccode( int, "mpfr_erangeflag_p()" );
+setflag0() ::= Ccode( void, "mpfr_set_erangeflag()" );
 isfinite0(x:RR) ::=Ccode(bool,"mpfr_number_p(",x,")");
 isinf0 (x:RR) ::= Ccode(bool,"mpfr_inf_p(",x,")");
 isnan0 (x:RR) ::= Ccode(bool,"mpfr_nan_p(",x,")");
@@ -709,7 +719,9 @@ export nanRR(prec:ulong):RR := (
      x);
 
 export toCC(x:RR,y:RR):CC := (
-     if precision0(x) == precision0(y) then CC(x,y)
+     if ( isnan0(x) || isnan0(y) ) then (prec := precision0(x); z := nanRR(prec); CC(z,z))
+     else if ( isinf0(x) || isinf0(y) ) then (prec := precision0(x); z := infinityRR(prec,1); CC(z,z))
+     else if precision0(x) == precision0(y) then CC(x,y)
      else if precision0(x) < precision0(y) then CC(x,toRR(y,precision0(x)))
      else CC(toRR(x,precision0(y)),y)
      );
@@ -1098,50 +1110,50 @@ export (x:RR) >> (n:int) : RR := x << long(-n);
 
 -- complex arithmetic
 
-export (x:CC) + (y:CC) : CC := CC(x.re+y.re, x.im+y.im);
-export (x:CC) - (y:CC) : CC := CC(x.re-y.re, x.im-y.im);
-export (x:RR) - (y:CC) : CC := CC(x-y.re,-y.im);
-export (x:int) - (y:CC) : CC := CC(x-y.re,-y.im);
-export (x:CC) - (y:RR) : CC := CC(x.re-y,x.im);
-export (x:CC) + (y:RR) : CC := CC(x.re+y,x.im);
-export (x:RR) + (y:CC) : CC := CC(x+y.re,y.im);
-export -(y:CC) : CC := CC(-y.re,-y.im);
+export (x:CC) + (y:CC) : CC := toCC(x.re+y.re, x.im+y.im);
+export (x:CC) - (y:CC) : CC := toCC(x.re-y.re, x.im-y.im);
+export (x:RR) - (y:CC) : CC := toCC(x-y.re,-y.im);
+export (x:int) - (y:CC) : CC := toCC(x-y.re,-y.im);
+export (x:CC) - (y:RR) : CC := toCC(x.re-y,x.im);
+export (x:CC) + (y:RR) : CC := toCC(x.re+y,x.im);
+export (x:RR) + (y:CC) : CC := toCC(x+y.re,y.im);
+export -(y:CC) : CC := toCC(-y.re,-y.im);
 
 export (x:CC) * (y:RR) : CC := (
      if isfinite0(x.re) && isfinite0(x.im) && isfinite0(y)
-     then CC(x.re*y, x.im*y)
+     then toCC(x.re*y, x.im*y)
      else if isnan(x) || isnan(y) then nanCC(min(precision(x),precision(y)))
      else infinityCC(min(precision(x),precision(y))));
 export (y:RR) * (x:CC) : CC := (
      if isfinite0(x.re) && isfinite0(x.im) && isfinite(y)
-     then CC(x.re*y, x.im*y)
+     then toCC(x.re*y, x.im*y)
      else if isnan(x) || isnan(y) then nanCC(min(precision(x),precision(y)))
      else infinityCC(min(precision(x),precision(y))));
 export (y:int) * (x:CC) : CC := (
      if isinf(x) && y != 0
      then infinityCC(precision(x))
-     else CC(x.re*y, x.im*y));
+     else toCC(x.re*y, x.im*y));
 export (x:CC) * (y:ZZ) : CC := (
      if isinf(x) && !isZero(y)
      then infinityCC(precision(x))
-     else CC(x.re*y, x.im*y));
+     else toCC(x.re*y, x.im*y));
 export (y:ZZ) * (x:CC) : CC := (
      if isinf(x) && !isZero(y)
      then infinityCC(precision(x))
-     else CC(x.re*y, x.im*y));
+     else toCC(x.re*y, x.im*y));
 export (x:CC) * (y:CC) : CC := (
      if isinf(x) && !isZero(y) && !isnan(y) || isinf(y) && !isZero(x) && !isnan(x)
      then infinityCC(min(precision(x),precision(y)))
-     else CC(x.re*y.re-x.im*y.im, x.im*y.re+x.re*y.im));
+     else toCC(x.re*y.re-x.im*y.im, x.im*y.re+x.re*y.im));
 export (x:CC) / (y:RR) : CC := (
      if isZero(y) && !isnan(x) && !isZero(x)
      then infinityCC(min(precision(x),precision(y)))
-     else CC(x.re/y, x.im/y));
+     else toCC(x.re/y, x.im/y));
 export (x:CC) / (y:int) : CC := (
      if y == 0 && !isnan(x) && !isZero(x)
      then infinityCC(precision(x))
-     else CC(x.re/y, x.im/y));
-export conj(x:CC):CC := CC(x.re,-x.im);
+     else toCC(x.re/y, x.im/y));
+export conj(x:CC):CC := toCC(x.re,-x.im);
 export norm2(x:CC):RR := x.re*x.re + x.im*x.im;
 
 export (x:CC) << (n:long) : CC := if n == long(0) then x else CC(x.re<<n,x.im<<n);
@@ -1176,30 +1188,58 @@ export (x:CC) === (y:QQ) : bool := x.re === y && x.im === 0;
 export (x:QQ) === (y:CC) : bool := x === y.re && y.im === 0;
 
 export compare(x:CC,y:CC):int := (
+     if ( isinf(x.re) || isinf(y.re) || isinf(x.im) || isinf(y.im) ) then (
+       setflag0();
+       return 0;
+     );
      r := compare(x.re,y.re);
      if flagged() || r != 0 then r
      else compare(x.im,y.im));
 export compare(x:CC,y:RR):int := (
+     if ( isinf(x.re) || isinf(x.im) || isinf(y) ) then (
+       setflag0();
+       return 0;
+     );
      r := compare(x.re,y);
      if flagged() || r != 0 then r
      else compare0(x.im,0));
 export compare(x:RR,y:CC):int := (
+     if ( isinf(x) || isinf(y.re) || isinf(y.im) ) then (
+       setflag0();
+       return 0;
+     );
      r := compare(x,y.re);
      if flagged() || r != 0 then r
      else -compare0(y.im,0));
 export compare(x:CC,y:ZZ):int := (
+     if ( isinf(x.re) || isinf(x.im) ) then (
+       setflag0();
+       return 0;
+     );
      r := compare(x.re,y);
      if flagged() || r != 0 then r
      else compare0(x.im,0));
 export compare(x:ZZ,y:CC):int := (
+     if ( isinf(y.re) || isinf(y.im) ) then (
+       setflag0();
+       return 0;
+     );
      r := compare(x,y.re);
      if flagged() || r != 0 then r
      else -compare0(y.im,0));
 export compare(x:CC,y:QQ):int := (
+     if ( isinf(x.re) || isinf(x.im) ) then (
+       setflag0();
+       return 0;
+     );
      r := compare(x.re,y);
      if flagged() || r != 0 then r
      else compare0(x.im,0));
 export compare(x:QQ,y:CC):int := (
+     if ( isinf(y.re) || isinf(y.im) ) then (
+       setflag0();
+       return 0;
+     );
      r := compare(x,y.re);
      if flagged() || r != 0 then r
      else -compare0(y.im,0));

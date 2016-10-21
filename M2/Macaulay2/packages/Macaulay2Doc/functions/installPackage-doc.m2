@@ -41,7 +41,8 @@ document {
 	       If ", TO "false", ", then do give the option.
 	       If ", TO "null", ", then propagate the option from the current ", TO "commandLine", ", if one occurs there." 
 	       },
-	  DebuggingMode => Boolean => { "whether to enter ", TO "the debugger", " if an error occurs during installation" },
+	  DebuggingMode => Boolean => { "whether to enter ", TO "the debugger", " if an error occurs during installation; 
+	       however, if ", TO "debuggingMode", " is already ", TT "false", ", it will remain so." },
 	  RerunExamples => Boolean => "whether to rerun all the examples during installation",
 	  RunExamples => Boolean => "whether to run the examples during installation",
 	  IgnoreExampleErrors => Boolean => "whether to ignore errors that occur during the running of examples during installation",
@@ -90,8 +91,8 @@ document {
 	       that cross-reference it."},
 	  CacheExampleOutput => Boolean => {
 	       "whether to cache (newer) example output in a subdirectory of the ", TO2{[newPackage,AuxiliaryFiles],"auxiliary file directory"}, "
-	       named ", TT "examples", ", for use in a future installation.  This value will override any value explicitly specified
-	       when ", TO "newPackage", " is called.  After the directory is created, it will necessary for the user to specify
+	       named ", TT "examples", ", for use in a future installation.  This value, if set to ", TO "true", " or ", TO "false", ", will override any value explicitly specified
+	       when ", TO "newPackage", " is called.  After the directory is created, it will be necessary for the user to specify
 	       ", TT "AuxiliaryFiles=>true", " with the ", TO "newPackage", " command."
 	       },
 	  SeparateExec => Boolean => {
@@ -105,7 +106,8 @@ document {
 	  },
      Consequences => {
 	  {"The package is installed in a local directory, so that in the future, one may simply use ", TO "loadPackage", ".  Documentation for the
-	  package is also produced, running any Macaulay2 examples that are requested in the package documentation." }
+	  package is also produced, running any Macaulay2 examples that are requested in the package documentation, with
+	  the random number seed initialized to 0." }
 	  },
      "The main action of this routine is to generate the documentation of the given package and install the Macaulay2 package and documentation. ",
      PARA{ "The actual file loaded is ", TT "PACKAGENAME.m2", ", which should be on the load ", TO "path", " and should contain a package named ", TT "PACKAGENAME", "."},
@@ -153,7 +155,7 @@ document {
 	  ", TT (replace("PKG", "PACKAGENAME", Layout#1#"packagelib")|".installed"), " or
 	  ", TT (replace("PKG", "PACKAGENAME", Layout#2#"packagelib")|".installed"), " is created, to signify that installation was completed."
 	  },
-     SeeAlso => {"packages", "epkg", "prefixPath", "Layout"}
+     SeeAlso => {"packages", "epkg", "prefixPath", "Layout", installedPackages, uninstallAllPackages}
      }
 
 -- Local Variables:

@@ -21,12 +21,18 @@ public:
   bool is_skew_var(int i) const { return _skew_exp[i]; }
   int skew_variable(int i) const { return _skew_list[i]; }
 
+  // number of variables occuring in 'exp' which are skew variables
+  int skew_degree(const int *exp) const;
+
   int skew_vars(const int *exp, int *result) const;
+  int skew_vars(const long *exp, int *result) const;
   // The number s of skew variables in 'exp' is returned, and their
   // indices are placed in result[0], ..., result[s-1].
   // The space that 'result' points to MUST hold at least 'nskew' ints.
 
   int mult_sign(const int *exp1, const int *exp2) const;
+  int mult_sign(const long *exp1, const long *exp2) const;
+  
   int diff(const int *exp1, const int *exp2, int *result) const;
   int divide(const int *exp1, const int *exp2, int *result) const;
   bool exp_is_zero(const int *exp) const;

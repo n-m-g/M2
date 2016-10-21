@@ -187,6 +187,25 @@ void Monoid::set_degrees()
   degree_of_var_.append(degree_monoid_->make_one());
 }
 
+std::vector<int> Monoid::getFirstWeightVector() const
+{
+  std::vector<int> result;
+
+  // grab the first weight vector
+  if (getMonomialOrdering()->len > 0
+      and getMonomialOrdering()->array[0]->type == MO_WEIGHTS)
+    {
+      int i;
+      result.reserve(n_vars());
+      const int *wts = getMonomialOrdering()->array[0]->wts;
+      for (i=0; i<getMonomialOrdering()->array[0]->nvars; i++)
+        result.push_back(wts[i]);
+      for (; i<n_vars(); i++)
+        result.push_back(0);
+    }
+  return result;
+}
+
 void Monoid::set_overflow_flags()
 {
   overflow = newarray_atomic(enum overflow_type, monomial_size_);
@@ -290,6 +309,20 @@ void Monoid::text_out(buffer &o) const
     }
 
   o << newline << "  ]";
+}
+
+unsigned int Monoid::computeHashValue(const_monomial m) const
+{
+  unsigned int seed = 0x3124252;
+  unsigned int hash = 0x43435728;
+  int len = monomial_size();
+  for (int i=0; i<len; i++)
+    {
+      unsigned int val = *m++;
+      hash += seed * val;
+      seed = seed + 1342234;
+    }
+  return hash;
 }
 
 void Monoid::from_expvector(const_exponents exp, monomial result) const

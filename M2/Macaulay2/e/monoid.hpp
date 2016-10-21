@@ -11,6 +11,7 @@
 #include <vector>
 #include "imonorder.hpp"
 
+#include <vector>
 class PolynomialRing;
 
 typedef int * exponents;
@@ -25,12 +26,12 @@ typedef const int * const_monomial;
 typedef const int * const_varpower;
 
 #define ALLOCATE_EXPONENTS(byte_len) static_cast<exponents>(alloca(byte_len))
-#define EXPONENT_BYTE_SIZE(nvars) (sizeof(int) * (nvars))
+#define EXPONENT_BYTE_SIZE(nvars) static_cast<int>((sizeof(int) * (nvars)))
 
 #define ALLOCATE_MONOMIAL(byte_len) static_cast<monomial>(alloca(byte_len))
-#define MONOMIAL_BYTE_SIZE(mon_size) (sizeof(int) * (mon_size))
+#define MONOMIAL_BYTE_SIZE(mon_size) static_cast<int>((sizeof(int) * (mon_size)))
 
-class Monoid : public mutable_object
+class Monoid : public MutableEngineObject
 {
   int nvars_;
   M2_ArrayString varnames_;
@@ -107,6 +108,13 @@ public:
   bool has_monomials_lt_one() const {
     return (n_invertible_vars_ > 0 || local_vars->len > 0); }
 
+  int numInvertibleVariables() const { return n_invertible_vars_; }
+  int numNonTermOrderVariables() const { return local_vars->len; }
+
+  // returns an empty vector if the first part of the monomial ordering is
+  // not a weight vector
+  std::vector<int> getFirstWeightVector() const;
+
   void text_out(buffer &o) const;
 
   int n_vars()        const { return nvars_; }
@@ -115,6 +123,9 @@ public:
 
   int n_slots(int nparts) const;
   int num_parts() const;
+
+  unsigned int computeHashValue(const_monomial m) const;
+
 
   /////////////////////////
   // Monomial arithmetic //
@@ -185,7 +196,9 @@ public:
   // True if the first part of the order has a weight vector.
   // MUST be true in order for first_weight_value to not give erroneous value
 
-  long first_weight_value(const_monomial m) const { return m[first_weights_slot_]; }
+  long first_weight_value(const_monomial m) const {
+    return m[first_weights_slot_];
+  }
   // Returns the value of the first weight vector in the monomial order.
   // If none, returns 0.  First call weight_value_exists() before using.
 };

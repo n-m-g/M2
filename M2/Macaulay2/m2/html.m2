@@ -3,7 +3,7 @@
 
 fixtitle = method()
 fixtitle Nothing := identity
-fixtitle String := s -> replace("\"","&quot;",s)	    -- " just in case emacs gets confused
+fixtitle String := htmlLiteral
 
 Macaulay2HomePage := () -> "http://www.math.uiuc.edu/Macaulay2/"
 
@@ -140,6 +140,7 @@ html HREF := x -> (
      concatenate("<a href=\"", toURL first x, "\">", r, "</a>")
      )
 tex  HREF := x -> concatenate("\\special{html:<a href=\"", texLiteral toURL first x, "\">}", tex last x, "\\special{html:</a>}")
+
 html TO   := x -> (
      tag := x#0;
      d := fetchPrimaryRawDocumentation tag;
@@ -204,6 +205,11 @@ links := tag -> (
      LINK { "href" => toURL doccss, "rel" => "stylesheet", "type" => "text/css" }
      )
 
+-- Also set the character encoding with a meta http-equiv statement. (Sometimes XHTML
+-- is parsed as HTML, and then the HTTP header or a meta tag is used to determine the
+-- character encoding.  Locally-stored documentation does not have an HTTP header.)
+defaultCharSet := () -> META { "http-equiv" => "Content-Type", "content" => "text/html; charset=utf-8" }
+
 BUTTON := (s,alt) -> (
      s = toURL s;
      if alt === null
@@ -213,7 +219,7 @@ BUTTON := (s,alt) -> (
 html HTML := t -> concatenate(
 ///<?xml version="1.0" encoding="utf-8" ?>  <!-- for emacs: -*- coding: utf-8 -*- -->
 <!-- Apache may like this line in the file .htaccess: AddCharset utf-8 .html -->
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN"	 "http://www.w3.org/2002/04/xhtml-math-svg/xhtml-math-svg-flat.dtd" >
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN"	 "http://www.w3.org/2002/04/xhtml-math-svg/xhtml-math-svg.dtd" >
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 ///,
      apply(t,html), 
@@ -283,7 +289,7 @@ net TreeNode := x -> (
 
 toDoc := method()
 toDoc ForestNode := x -> if #x>0 then UL apply(toList x, y -> toDoc y)
-toDoc TreeNode := x -> SPAN { TOH checkIsTag x#0, toDoc x#1 }
+toDoc TreeNode := x -> DIV { TOH checkIsTag x#0, toDoc x#1 }
 
 local visitCount
 local duplicateReferences
@@ -408,7 +414,7 @@ makeMasterIndex := (keylist,verbose) -> (
      title := DocumentTag.FormattedKey topDocumentTag | " : Index";
      if verbose then stderr << "--making '" << title << "' in " << fn << endl;
      r := HTML {
-	  HEAD splice { TITLE title, links() },
+	  HEAD splice { TITLE title, defaultCharSet(), links() },
 	  BODY nonnull {
 	       DIV { topNodeButton, " | ", tocButton, {* " | ", directoryButton, *} " | ", homeButton },
 	       HR{},
@@ -430,7 +436,7 @@ maketableOfContents := (verbose) -> (
      if verbose then stderr << "--making  " << title << "' in " << fn << endl;
      fn
      << html HTML {
-	  HEAD splice { TITLE title, links() },
+	  HEAD splice { TITLE title, defaultCharSet(), links() },
 	  BODY {
 	       DIV { topNodeButton, " | ", masterIndexButton, {* " | ", directoryButton, *} " | ", homeButton },
 	       HR{},
@@ -454,15 +460,21 @@ aftermatch := (pat,str) -> (
      m := regex(pat,str);
      if m === null then "" else substring(m#0#0,str))
 
-runFile := (inf,inputhash,outf,tmpf,desc,pkg,announcechange,usermode) -> ( -- return false if error
+describeReturnCode = r -> (
+     if r % 256 == 0 then "exited with status code " | toString (r // 256)
+     else "killed by signal " | toString (r % 128) | if r & 128 =!= 0 then " (core dumped)" else ""
+     )
+
+runFile := (inf,inputhash,outf,tmpf,desc,pkg,announcechange,usermode,examplefiles) -> ( -- return false if error
      announcechange();
      stderr << "--making " << desc << " in file " << outf << endl;
      if fileExists outf then removeFile outf;
      pkgname := toString pkg;
-     ldpkg := if pkgname != "Macaulay2Doc" then concatenate(" -e 'loadPackage(\"",pkgname,"\", Reload => true, FileName => \"",pkg#"source file","\")'") else "";
+     setseed := " --no-randomize";
+     ldpkg := if pkgname != "Macaulay2Doc" then concatenate(" -e 'needsPackage(\"",pkgname,"\", FileName => \"",pkg#"source file","\")'") else "";
      src := concatenate apply(srcdirs, d -> (" --srcdir ",format d));
      -- we specify --no-readline because the readline library catches SIGINT:
-     args := "--silent --print-width 77 --stop --int --no-readline" | (if usermode then "" else " -q") | src | ldpkg;
+     args := "--silent --print-width 77 --stop --int --no-readline" | (if usermode then "" else " -q") | src | setseed | ldpkg;
      cmdname := commandLine#0;
      -- must convert a relative path to an absolute path so we can run the same M2 from another directory while
      -- running the examples:
@@ -475,6 +487,7 @@ runFile := (inf,inputhash,outf,tmpf,desc,pkg,announcechange,usermode) -> ( -- re
      cmd := ulimit | "cd " | rundir | "; " | cmdname | " " | args | " <" | format inf | " >>" | format toAbsolutePath tmpf | " 2>&1";
      stderr << cmd << endl;
      makeDirectory rundir;
+     for fn in examplefiles do copyFile(fn,rundir | baseFilename fn);
      r := run cmd;
      if r == 0 then (
 	  scan(reverse findFiles rundir, f -> if isDirectory f then (
@@ -494,23 +507,15 @@ runFile := (inf,inputhash,outf,tmpf,desc,pkg,announcechange,usermode) -> ( -- re
 	  moveFile(tmpf,outf);
 	  return true;
 	  );
-     stderr << tmpf << ":0:1: (output file) error: Macaulay2 exited with return code " << r << endl;
+     stderr << tmpf << ":0:1: (output file) error: Macaulay2 " << describeReturnCode r << endl;
      stderr << aftermatch(M2errorRegexp,get tmpf);
      stderr << inf  << ":0:1: (input file)" << endl;
      scan(statusLines get inf, x -> stderr << x << endl);
      if # findFiles rundir == 1
      then removeDirectory rundir
      else stderr << rundir << ": error: files remain in temporary run directory after program exits abnormally" << endl;
-     if r == 2 then (
-	  removeFile tmpf;
-	  error "subprocess interrupted";
-	  );
-     if r == 131 then (
-	  removeFile tmpf;
-	  error "subprocess terminated abnormally";
-	  );
-     if debugLevel == 124 then stderr << "-- r = " << r << endl;
-     stderr << "M2: *** [check] Error " << r//256 << endl;
+     stderr << "M2: *** Error " << (if r<256 then r else r//256) << endl;
+     if r == 2 then error "interrupted";
      hadExampleError = true;
      numExampleErrors = numExampleErrors + 1;
      return false;
@@ -524,7 +529,7 @@ runString := (x,pkg,usermode) -> (
      rm := fn -> if fileExists fn then removeFile fn;
      rmall := () -> rm \ {inf, tmpf, outf};
      inf << x << endl << close;
-     ret := runFile(inf,hash x,outf,tmpf,"test results",pkg,t->t,usermode);
+     ret := runFile(inf,hash x,outf,tmpf,"test results",pkg,t->t,usermode,{});
      if ret then (rm inf; rm outf;);
      ret)
 
@@ -578,7 +583,7 @@ installPackage = method(Options => {
 	  EncapsulateDirectory => pkg -> pkg#"title"|"-"|pkg.Options.Version|"/",
 	  IgnoreExampleErrors => false,
 	  FileName => null,
-	  CacheExampleOutput => false,			    -- overrides the value specified by newPackage
+	  CacheExampleOutput => null,			    -- overrides the value specified by newPackage if true or false
 	  CheckDocumentation => true,
 	  MakeDocumentation => true,
 	  MakeInfo => true,
@@ -669,21 +674,27 @@ installPackage Package := opts -> pkg -> (
      if not fileExists fn then error("file ", fn, " not found");
      copyFile(fn, buildPrefix|pkgDirectory|bn, Verbose => debugLevel > 5);
 
-     excludes := Exclude => {"^CVS$", "^\\.svn$"};
+     excludes := Exclude => {
+	  "^CVS$", 
+	  "^\\.svn$", 
+	  -- The package Style has a read-only file "Makefile", made from "Makefile.in", that doesn't need to be distributed.
+	  -- Better would be to fix copyDirectory so it manages to copy even when the target file is read-only
+	  "Makefile"
+	  };
 
      if pkg === Core then (
 	  ) else (
      	  
 	  -- copy package source subdirectory
 	  srcDirectory := replace("PKG",pkg#"title",installationLayout#"package");
-	  dn := realpath currentSourceDir | buildPackage;
-	  if isDirectory dn
+	  auxiliaryFilesDirectory := realpath currentSourceDir | buildPackage;
+	  if isDirectory auxiliaryFilesDirectory
 	  then (
 	       if not (options pkg).AuxiliaryFiles
-	       then error ("package ",toString pkg," has auxiliary files in \"",dn,"\", but newPackage wasn't given AuxiliaryFiles=>true");
-	       if verbose then stderr << "--copying auxiliary source files from " << dn << endl;
+	       then error ("package ",toString pkg," has auxiliary files in \"",auxiliaryFilesDirectory,"\", but newPackage wasn't given AuxiliaryFiles=>true");
+	       if verbose then stderr << "--copying auxiliary source files from " << auxiliaryFilesDirectory << endl;
 	       makeDirectory (buildPrefix|srcDirectory);
-	       copyDirectory(dn, buildPrefix|srcDirectory, UpdateOnly => true, Verbose => debugLevel > 0, excludes);
+	       copyDirectory(auxiliaryFilesDirectory, buildPrefix|srcDirectory, UpdateOnly => true, Verbose => verbose, excludes);
 	       )
 	  else (
 	       if (options pkg).AuxiliaryFiles
@@ -777,6 +788,7 @@ installPackage Package := opts -> pkg -> (
 	  hadExampleError = false;
 	  numExampleErrors = 0;
 	  scan(pairs pkg#"example inputs", (fkey,inputs) -> (
+		    examplefiles := if pkg#"example data files"#?fkey then pkg#"example data files"#fkey else {};
 		    -- args:
 		    inf := infn fkey;
 		    outf := outfn fkey;
@@ -786,8 +798,8 @@ installPackage Package := opts -> pkg -> (
 		    changefun := () -> remove(rawDocUnchanged,fkey);
 		    inputhash := hash inputs;
 	  	    possiblyCache := () -> (
-			 if opts.CacheExampleOutput or (options pkg).CacheExampleOutput === true 
-			 and not fileExists outf' or fileExists outf' and fileTime outf > fileTime outf' 
+			 if opts.CacheExampleOutput =!= false and (options pkg).CacheExampleOutput === true 
+			 and ( not fileExists outf' or fileExists outf' and fileTime outf > fileTime outf' )
 			 then (
 			      if verbose then stderr << "--caching example output for " << fkey << " in " << outf' << endl;
 			      if not isDirectory exampleDir' then makeDirectory exampleDir';
@@ -808,7 +820,7 @@ installPackage Package := opts -> pkg -> (
 			 )
 		    else (
 			 inf << concatenate apply(inputs, s -> s|"\n") << close;
-			 if runFile(inf,inputhash,outf,tmpf,desc,pkg,changefun,if opts.UserMode === null then not noinitfile else opts.UserMode)
+			 if runFile(inf,inputhash,outf,tmpf,desc,pkg,changefun,if opts.UserMode === null then not noinitfile else opts.UserMode,examplefiles)
 			 then (
 			      removeFile inf;
 			      possiblyCache();
@@ -991,6 +1003,7 @@ installPackage Package := opts -> pkg -> (
 	       << html HTML { 
 		    HEAD splice {
 			 TITLE {fkey, commentize headline fkey}, -- I hope this works...
+			 defaultCharSet(),
 			 links tag
 			 },
 		    BODY { 
@@ -1177,6 +1190,7 @@ makePackageIndex List := path -> (
      fn << html HTML { 
 	  HEAD splice {
 	       TITLE {key, commentize headline key},
+	       defaultCharSet(),
 	       links()
 	       },
 	  BODY { 
@@ -1259,7 +1273,7 @@ new URL from String := (URL,str) -> new URL from {str}
 show URL := x -> (
      url := x#0;
      browser := getenv "WWWBROWSER";
-     if version#"operating system" === "MacOS" and runnable "open" then browser = "open" -- should ignore WWWBROWSER, according to Mike
+     if version#"operating system" === "Darwin" and runnable "open" then browser = "open" -- should ignore WWWBROWSER, according to Mike
      else
      if version#"issue" === "Cygwin" then browser = "cygstart";
      if browser === "" then (
@@ -1284,7 +1298,8 @@ showHtml = show Hypertext := x -> (
      fn := temporaryFileName() | ".html";
      fn << html HTML {
 	  HEAD {
-	       TITLE "Macaulay2 Output"
+	       TITLE "Macaulay2 Output",
+	       defaultCharSet()
 	       },
      	  BODY {
 	       x

@@ -23,7 +23,10 @@ M2_string IM2_FreeModule_to_string(const FreeModule *F)
   return o.to_string();
 }
 
-unsigned long int IM2_FreeModule_hash(const FreeModule *F); /* TODO */
+unsigned int rawFreeModuleHash(const FreeModule *F)
+{
+  return F->hash();
+}
 
 const FreeModule /* or null */ *IM2_FreeModule_make(const Ring *R, int rank)
 {
@@ -176,6 +179,19 @@ const FreeModule * IM2_FreeModule_submodule(const FreeModule *F,
           ERROR(e.what());
           return NULL;
      }
+}
+
+M2_arrayintOrNull rawFreeModuleSelectByDegrees(const FreeModule* F,
+                                               M2_arrayint lo,
+                                               M2_arrayint hi)
+{
+  try {
+    return F->select_by_degrees(lo,hi);
+  }
+  catch (exc::engine_error e) {
+    ERROR(e.what());
+    return NULL;
+  }
 }
 
 // Local Variables:

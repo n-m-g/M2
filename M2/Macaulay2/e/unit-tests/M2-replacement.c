@@ -1,7 +1,7 @@
 #include "engine-exports.h"
 #include "M2mem-replacement.h"
 #include <memory.h>
-#include <gc/gc.h>
+#include <M2/gc-include.h>
 
 typedef struct RingElementrec *RingElement;
 
@@ -73,6 +73,7 @@ M2_string (*gmp_tostringRRpointer)(__mpfr_struct *);
 char newline[] = "\n";
 
 int M2_gbTrace = 0;
+int M2_numericalAlgebraicGeometryTrace = 0;
 
 /*
  Local Variables:

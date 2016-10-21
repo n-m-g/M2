@@ -119,7 +119,7 @@ Node
 
     The valid keywords are: {\bf Key}, {\bf Headline}, {\bf Usage}, {\bf
     Inputs}, {\bf Outputs}, {\bf Consequences}, {\bf Description}, {\bf
-    SeeAlso}, {\bf Subnodes}, and {\bf Caveat}.
+    SeeAlso}, {\bf Subnodes}, {\bf Caveat}, and {\bf ExampleFiles}.
 
     The only keyword which is always required is {\bf Key}.
 
@@ -160,8 +160,11 @@ Node
     The text in the {\bf Description} section occurs in subsections labeled
     with the keywords {\bf Text}, {\bf Example}, {\bf CannedExample}, {\bf
     Pre}, and {\bf Code}.  The text in a {\bf Text} subsection can be separated
-    into paragraphs with blank lines.  Each paragraph can contain markup as
-    described above.  The text in an {\bf Example} subsection consists of lines
+    into paragraphs with blank lines.  (A paragraph, when rendered in HTML,
+    will normally be enclosed in an HTML P tag, except if its top level markup is an instance of
+    @TO HypertextContainer@ or @TO HypertextParagraph@.)
+
+    The text in an {\bf Example} subsection consists of lines
     of Macaulay2 code to be used as examples in the documentation node; within
     in each complete expression, indent lines after the first one more than the
     first; output will be generated automatically and incorporated into the
@@ -172,6 +175,12 @@ Node
     removed, is wrapped with parentheses and evaluated; the result is spliced
     into the list of documentation items at the appropriate point before
     passing the list to @TO document@.
+
+    Each line in the {\bf ExampleFiles} section should be the name of a file
+    in the auxiliary files directory of the package; the name of that directory
+    is the same as the name of the package.  Copies of the corresponding files 
+    will be made visible in the current directory while the example code is
+    running.     
 
     The lines in the {\bf Subnodes} section not beginning with a colon are keys
     giving links to the subnodes of the current documentation node.  The

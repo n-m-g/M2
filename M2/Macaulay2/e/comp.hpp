@@ -16,7 +16,6 @@ class ResolutionComputation;
 
 class EngineComputation;
 class EngineGBComputation;
-class EngineResolutionComputation;
 
 class buffer;
 class GBComputation;
@@ -27,7 +26,7 @@ class GBBComputation;
 
     @brief Non-functional code.
 */
-class GBBComputation : public mutable_object
+class GBBComputation : public MutableEngineObject
 // This is the base type for all Groebner basis and syzygy computations
 {
 protected:
@@ -71,7 +70,7 @@ public:
   virtual void show() const;
 };
 
-class GroebnerBasis : public mutable_object // mutable, or immutable???
+class GroebnerBasis : public MutableEngineObject // mutable, or immutable???
 {
 protected:
   GroebnerBasis() {}
@@ -115,7 +114,7 @@ public:
   // M2_gbTrace value.
 };
 
-class EngineComputation : public mutable_object
+class EngineComputation : public MutableEngineObject
 {
 private:
   enum ComputationStatusCode computation_status;
@@ -155,7 +154,6 @@ public:
   // This routine should set the status of the computation.
 
   virtual EngineGBComputation * cast_to_EngineGBComputation() { return 0; }
-  virtual EngineResolutionComputation * cast_to_EngineResolutionComputation() { return 0; }
 
   virtual void text_out(buffer &o) const;
 
@@ -213,7 +211,7 @@ public:
 };
 
 /// Older -- but current --- code ///
-class Computation : public mutable_object
+class Computation : public MutableEngineObject
 {
 private:
   enum ComputationStatusCode computation_status;

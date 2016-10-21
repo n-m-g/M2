@@ -208,6 +208,29 @@ fixWA := diffs -> (
 	       fix x#0 => fix x#1)
 	  else fix x))
 
+findSymbols = varlist -> (
+    -- varlist is a list or sequence of items we wish to use for variable names.
+    -- these may be: Symbol's, RingElement's (which are variables in a ring)
+    -- or lists or sequences of such.
+    -- Return value: a List of Symbol's and IndexVariable's (or an error message gets issued)
+    varlist = deepSplice sequence varlist;
+    v := flatten toList apply(varlist, x->if class x === MutableList then toList x else x);
+    genList := for i from 0 to #v-1 list (
+            try baseName v#i
+            else if instance(v#i,String) and match("[[:alnum:]$]+",v#i) then getSymbol v#i
+            else (
+                msg := concatenate("encountered object not usable as variable at position ",toString i," in list:");
+                preX := "        ";
+                pw := max(printWidth,80);
+                error (msg,newline,toString (preX | silentRobustNetWithClass(pw - width  preX, 5, 3, v#i)));
+                )
+            );
+     -- is this next line needed?
+     -- what is the purpose of this line?
+     scan(genList, sym -> if not (instance(sym,Symbol) or null =!= lookup(symbol <-, class sym)) then error "expected variable or symbol");
+     genList
+    )
+
 makeit1 := (opts) -> (
      M := new GeneralOrderedMonoid of MonoidElement;
      M#"original options" = opts;
@@ -234,7 +257,10 @@ makeit1 := (opts) -> (
 	  -- apply(varlist,M.generators,(e,x) -> new Holder2 from {expression e,x})
 	  );
      processTrm := (k,v) -> if v =!= 1 then Power{M.generatorExpressions#k, v} else M.generatorExpressions#k;
-     processTrms := trms -> new Product from apply(trms, processTrm);
+     processTrms := trms -> (
+	  if # trms === 1
+	  then processTrm trms#0
+	  else new Product from apply(trms, processTrm));
      expression M := x -> (
 	  processTrms rawSparseListFormMonomial x.RawMonomial
 	  -- new Holder2 from { processTrms rawSparseListFormMonomial x.RawMonomial, x }
@@ -582,8 +608,12 @@ monomialOrderMatrix RawMonomialOrdering := (mo) -> (
      mat := rawMonomialOrderingToMatrix mo;
      -- the last entry of 'mat' determines whether the tie breaker is Lex or RevLex.
      -- there may be no other elements of mat, so the next line needs to handle that case.
-     ordermat := if #mat === 1 then map(ZZ^0, ZZ^nvars, 0) else matrix pack(drop(mat,-1),nvars);
-     (ordermat, if last mat == 0 then Lex else RevLex)
+     ordermat := if #mat === 3 then map(ZZ^0, ZZ^nvars, 0) else matrix pack(drop(mat,-3),nvars);
+     (ordermat, 
+         if mat#-3 == 0 then Lex else RevLex,
+         if mat#-2 == -1 then Position=>Down else if mat#-2 == 1 then Position=>Up else Position=>mat#-2,
+         "ComponentBefore" => mat#-1
+         )
      )
 monomialOrderMatrix Monoid := (M) -> monomialOrderMatrix M.RawMonomialOrdering
 monomialOrderMatrix Ring := (R) -> monomialOrderMatrix monoid R

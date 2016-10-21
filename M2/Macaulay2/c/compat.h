@@ -23,7 +23,7 @@ extern char errfmtnc[];
 #define __DARWIN__ 1
 #endif
 
-#include <gc/gc.h>
+#include <M2/gc-include.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -58,11 +58,7 @@ extern char errfmtnc[];
 #include <stdio.h>
 #include <fcntl.h>
 
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 /*
 # Local Variables:

@@ -4,7 +4,13 @@
 
 #include "NAG.hpp"
 #include "matrix-con.hpp"
-#include <dlfcn.h>
+#ifdef HAVE_DLFCN_H
+ #include <dlfcn.h>
+#else
+ #define dlopen(x,y) NULL
+ #define dlsym(x,y) NULL
+ #define dlclose(x) (-1)
+#endif
 #include <time.h>
 #include <exception>
 #include "lapack.hpp"
@@ -18,7 +24,6 @@ void complexAP::print()
 {
   printf("(%lf,%lf) ", getreal(), getimaginary());
 }
-
 
 // Straight Line Program classes
 
@@ -72,6 +77,7 @@ Matrix* StraightLineProgram::evaluate(const Matrix *vals) {return SLP<ComplexFie
 template <class Field>
 SLP<Field>::SLP()
 {
+  C = NULL;
   handle = NULL;
   eval_time = 0;
   n_calls = 0;
@@ -115,12 +121,12 @@ SLP<Field> /* or null */ *SLP<Field>::make(const Matrix *m_consts, M2_arrayint p
   if (num_slps>MAX_NUM_SLPs) {
     ERROR("max number of slps exceeded");
     res = NULL;
-  };
-  if (program->len < 3) {
+  } else if (program->len < 3) {
     ERROR("invalid SLP");
     res = NULL;
   } else {
     res = new SLP<Field>;
+    res->C = cast_to_CCC(m_consts->get_ring());
     catalog[num_slps++] = res;
     res->is_relative_position = false;
     res->num_consts = program->array[0];
@@ -152,7 +158,7 @@ SLP<Field> /* or null */ *SLP<Field>::make(const Matrix *m_consts, M2_arrayint p
       make_nodes(res->nodes, program->len+res->num_consts+res->num_inputs);
     }
     for (int i=0; i<res->num_consts; i++) {
-      res->nodes[i] = element_type(BIGCC_VAL(m_consts->elem(0,i)));
+      res->nodes[i] = element_type(toBigComplex(res->C,m_consts->elem(0,i)));
     }
   }
   return res;
@@ -179,6 +185,7 @@ template <class Field>
 SLP<Field> /* or null */ *SLP<Field>::copy()
 {
   SLP<Field>* res = new SLP<Field>;
+  res->C = C;
   res->is_relative_position = is_relative_position;
   res->program = M2_makearrayint(program->len);
   memcpy(res->program->array, program->array, program->len*sizeof(int));
@@ -230,7 +237,7 @@ int add_constant_get_position(VECTOR(typename Field::element_type)& consts, type
 {
   //!!! smarter implementation coming !!!
   consts.push_back(c);
-  return consts.size()-1;
+  return static_cast<int>(consts.size())-1;
 }
 
 /* create the part of slp computing f, return the position of the final operation */
@@ -267,7 +274,7 @@ int SLP<Field>::poly_to_horner_slp(int n, intarray& prog, VECTOR(element_type)& 
   prog.append(slpMULTIsum);
   prog.append(c);
   if (f!=NULL)
-    prog.append(CONST_OFFSET + add_constant_get_position<Field>(consts,element_type(BIGCC_VAL(f->coeff))));
+    prog.append(CONST_OFFSET + add_constant_get_position<Field>(consts,element_type(toBigComplex(C,f->coeff))));
   for (int i=0; i<n; i++)
     if (part_pos[i] != ZERO_CONST)
       prog.append(part_pos[i] - cur_p); // relative position of the i-th part
@@ -293,6 +300,7 @@ SLP<Field> /* or null */ *SLP<Field>::make(const PolyRing *R, ring_elem e)
     res = NULL;
   } else {
     res = new SLP<Field>;
+    res->C = cast_to_CCC(R->getCoefficientRing());
     res->is_relative_position = true;
     int n = res->num_inputs = R->n_vars();
     res->num_operations = 0;
@@ -317,7 +325,7 @@ SLP<Field> /* or null */ *SLP<Field>::make(const PolyRing *R, ring_elem e)
 
     // make program
     res->program = M2_makearrayint(prog.length() + 2/* accounts for lines +2,+3 */ + SLP_HEADER_LEN);
-    res->program->array[0] = res->num_consts = consts.size();
+    res->program->array[0] = res->num_consts = static_cast<int>(consts.size());
     prog.append(slpEND);
     prog.append(out+res->num_consts+res->num_inputs); // position of the output
 
@@ -353,6 +361,7 @@ SLP<Field> /* or null */ *SLP<Field>::concatenate(const SLP<Field>* slp)
   // length of the part containing operations and slpEND
 
   SLP<Field>* res = new SLP<Field>;
+  res->C = C;
   res->is_relative_position = true;
   res->num_inputs = num_inputs;
   res->num_operations = num_operations + slp->num_operations;
@@ -566,6 +575,7 @@ SLP<Field> /* or null */ *SLP<Field>::jacobian(bool makeHxH, SLP<Field> *&slpHxH
   int *end_program = program->array+program->len - num_outputs;
 
   SLP<Field>* res = new SLP<Field>;
+  res->C = C;
   res->is_relative_position = true;
   res->num_inputs = num_inputs;
   res->num_operations = num_operations;
@@ -721,7 +731,7 @@ Matrix *SLP<Field>::evaluate(const Matrix *values)
   if (values->n_cols() != num_inputs)
     ERROR("different number of inputs expected");
   for(i=0; i<num_inputs; i++, cur_node++)
-    nodes[cur_node] = element_type(BIGCC_VAL(values->elem(0,i)));
+    nodes[cur_node] = element_type(toBigComplex(C,values->elem(0,i)));
 
   clock_t start_t = clock(); // clock execution time
 
@@ -777,7 +787,7 @@ Matrix *SLP<Field>::evaluate(const Matrix *values)
   eval_time += clock()-start_t;
   n_calls++;
 
-  const CCC* R = values->get_ring()->cast_to_CCC();
+  const CCC* R = cast_to_CCC(values->get_ring());
   //CCC* R = CCC::create(53); //values->get_ring();
   FreeModule* S = R->make_FreeModule(cols_out);
   FreeModule* T = R->make_FreeModule(rows_out);
@@ -793,9 +803,12 @@ Matrix *SLP<Field>::evaluate(const Matrix *values)
     for(i=0; i<rows_out; i++)
       for(int j=0; j<cols_out; j++,c++) {
         //printf("%lf %lf \n", c->getreal(), c->getimaginary());
-        mpfr_set_d(re, c->getreal(), GMP_RNDN);
-        mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
-        ring_elem e = R->from_BigReals(re,im);
+        
+        //mpfr_set_d(re, c->getreal(), GMP_RNDN);
+        //mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
+        //ring_elem e = from_BigReals(R,re,im);
+        ring_elem e = from_doubles(R,c->getreal(),c->getimaginary());
+
         mat.set_entry(i,j,e);
       }
   } break;
@@ -803,9 +816,12 @@ Matrix *SLP<Field>::evaluate(const Matrix *values)
     for(i=0; i<rows_out; i++)
       for(int j=0; j<cols_out; j++) {
         element_type c = nodes[program->array[i*cols_out+j+out_entries_shift]];
-        mpfr_set_d(re, c.getreal(), GMP_RNDN);
-        mpfr_set_d(im, c.getimaginary(), GMP_RNDN);
-        ring_elem e = R->from_BigReals(re,im);
+
+        //mpfr_set_d(re, c.getreal(), GMP_RNDN);
+        //mpfr_set_d(im, c.getimaginary(), GMP_RNDN);
+        //ring_elem e = from_BigReals(R,re,im);
+        ring_elem e = from_doubles(R,c.getreal(),c.getimaginary());
+
         mat.set_entry(i,j,e);
       }
     //end: interpretation
@@ -1062,11 +1078,6 @@ bool solve_via_lapack(
                    )
 {
 
-#if !LAPACK
-  ERROR("lapack not present");
-  return false;
-#else
-
   bool ret = true;
   int info;
 
@@ -1113,7 +1124,6 @@ bool solve_via_lapack(
   deletearray(At);
 
   return ret;
-#endif
 }
 
 // lapack solve routine (direct call)
@@ -1124,10 +1134,6 @@ bool solve_via_lapack_without_transposition(
                    )
 {
 
-#if !LAPACK
-  ERROR("lapack not present");
-  return false;
-#else
 
   bool ret = true;
   int info;
@@ -1138,14 +1144,16 @@ bool solve_via_lapack_without_transposition(
   copy_complex_array<ComplexField>(size,b,x);
   double *copyb = (double*) x; // result is stored in copyb
 
+  
   /*
   printf("-----------(solve)-----------------------------------\ncopyA:\n");
-  for (i=0; i<size*size; i++)
+  for (int i=0; i<size*size; i++)
     printf("(%lf %lf) ", *(copyA+2*i), *(copyA+2*i+1));
   printf("\nb:\n");
-  for (i=0; i<size; i++)
+  for (int i=0; i<size; i++)
     printf("(%lf %lf) ", *(copyb+2*i), *(copyb+2*i+1));
   */
+
   zgesv_(&size, &bsize,
          copyA,
          &size, permutation,
@@ -1171,17 +1179,12 @@ bool solve_via_lapack_without_transposition(
   deletearray(permutation);
 
   return ret;
-#endif
 }
 
 // In: A, a square matrix of size "size"
 // Out: true if success, cond = condition number of A
 bool cond_number_via_svd(int size, complex* A, double& cond)
 {
-#if !LAPACK
-  ERROR("lapack not present");
-  return false;
-#else
   bool ret = true;
   char doit = 'A';  // other options are 'S' and 'O' for singular vectors only
   int rows = size;
@@ -1238,17 +1241,12 @@ bool cond_number_via_svd(int size, complex* A, double& cond)
   deletearray(sigma);
 
   return ret;
-#endif
 }
 
 // In: A, a square matrix of size "size"
 // Out: true if success, "norm" = operator norm of A^{-1}
 bool norm_of_inverse_via_svd(int size, complex* A, double& norm)
 {
-#if !LAPACK
-  ERROR("lapack not present");
-  return false;
-#else
   bool ret = true;
   char doit = 'A';  // other options are 'S' and 'O' for singular vectors only
   int rows = size;
@@ -1307,7 +1305,6 @@ bool norm_of_inverse_via_svd(int size, complex* A, double& norm)
   deletearray(sigma);
 
   return ret;
-#endif
 }
 
 // END lapack-based routines
@@ -1436,13 +1433,14 @@ PathTracker /* or null */* PathTracker::make(const Matrix *S, const Matrix *T, g
     ERROR("polynomial ring expected");
     return NULL;
   }
-  const Ring* K = R->getCoefficients();
-  if (K->is_CCC())
-    p->C = K->cast_to_CCC();
-  else {
-    ERROR("complex coefficients expected");
-    return NULL;
-  }
+  p->C = cast_to_CCC(R->getCoefficients());
+  //const Ring* K = R->getCoefficients();
+  // p->C = cast_to_CCC(K); // cast to ConcreteRing<ARingCCC> for now
+  if (!p->C)
+    {
+      ERROR("complex coefficients expected");
+      return NULL;
+    }
   p->productST = mpfr_get_d(productST,GMP_RNDN);
   //p->bigT = asin(sqrt(1-p->productST*p->productST));
   //const double pi = 3.141592653589793238462643383279502;
@@ -1507,12 +1505,12 @@ PathTracker /* or null */* PathTracker::make(const Matrix *HH)
     return NULL;
   }
   const Ring* K = R->getCoefficients();
-  if (K->is_CCC())
-    p->C = K->cast_to_CCC();
-  else {
-    ERROR("complex coefficients expected");
-    return NULL;
-  }
+  p->C = cast_to_CCC(K); // cast to ConcreteRing<ARingCCC> for now
+  if (!p->C)
+    {
+      ERROR("complex coefficients expected");
+      return NULL;
+    }
 
   p->H = HH;
   p->slpH = NULL;
@@ -1541,24 +1539,6 @@ PathTracker /* or null */* PathTracker::make(StraightLineProgram* slp_pred, Stra
   p->C = NULL;
   return p;
 }
-
-int PathTracker::makeFromHomotopy(const Matrix *HH)
-{
-  if (num_path_trackers>MAX_NUM_PATH_TRACKERS) {
-    ERROR("max number of path trackers exceeded");
-    return -1;
-  };
-  PathTracker* p = catalog[num_path_trackers] = new PathTracker;
-  p->number = num_path_trackers++;
-  if (HH->n_rows()!=1) {
-    ERROR("1-row matrix expected");
-    return -1;
-  };
-  return p->number;
-}
-
-
-
 
 void rawSetParametersPT(PathTracker* PT, M2_bool is_projective,
                         gmp_RR init_dt, gmp_RR min_dt,
@@ -1631,12 +1611,13 @@ int PathTracker::track(const Matrix* start_sols)
   double infinity_threshold2 = mpfr_get_d(infinity_threshold,GMP_RNDN); infinity_threshold2 *= infinity_threshold2;
   double end_zone_factor_dbl = mpfr_get_d(end_zone_factor,GMP_RNDN);
 
-  if (C==NULL) C = start_sols->get_ring()->cast_to_CCC(); //fixes the problem for PrecookedSLPs
-
+  if (C==NULL) 
+    C = cast_to_CCC(start_sols->get_ring()); //fixes the problem for PrecookedSLPs
+    
   int n = n_coords = start_sols->n_cols();
   n_sols = start_sols->n_rows();
 
-  if (M2_gbTrace>1) printf("epsilon2 = %e, t_step = %lf, dt_min_dbl = %lf, dt_increase_factor_dbl = %lf, dt_decrease_factor_dbl = %lf\n",
+  if (M2_numericalAlgebraicGeometryTrace>1) printf("epsilon2 = %e, t_step = %lf, dt_min_dbl = %lf, dt_increase_factor_dbl = %lf, dt_decrease_factor_dbl = %lf\n",
                         epsilon2, t_step, dt_min_dbl, dt_increase_factor_dbl, dt_decrease_factor_dbl);
 
   // memory distribution for arrays
@@ -1667,7 +1648,7 @@ int PathTracker::track(const Matrix* start_sols)
   complex* c = s_sols;
   for(i=0; i<n_sols; i++)
     for(j=0; j<n; j++,c++)
-      *c = complex(BIGCC_VAL(start_sols->elem(i,j)));
+      *c = complex(toBigComplex(C,start_sols->elem(i,j)));
 
   Solution* t_s = raw_solutions; //current target solution
   complex* s_s = s_sols; //current start solution
@@ -1862,7 +1843,7 @@ int PathTracker::track(const Matrix* start_sols)
     evaluate_slpHxH(n,x0t0,HxH);
     cond_number_via_svd(n, HxH/*Hx*/, t_s->cond);
     t_s->num_steps = count;
-    if (M2_gbTrace>0) {
+    if (M2_numericalAlgebraicGeometryTrace>0) {
       if (sol_n%50==0) printf("\n");
       switch (t_s->status) {
       case REGULAR: printf("."); break;
@@ -1874,7 +1855,7 @@ int PathTracker::track(const Matrix* start_sols)
       fflush(stdout);
     }
   }
-  if (M2_gbTrace>0) printf("\n");
+  if (M2_numericalAlgebraicGeometryTrace>0) printf("\n");
 
 
   // clear arrays
@@ -1922,7 +1903,7 @@ int PathTracker::track(const Matrix* start_sols)
 //   gmp_RR end_zone_factor_dbl = end_zone_factor;
 
 
-  //if (M2_gbTrace>1) printf("epsilon2 = %e, t_step = %lf, dt_min_dbl = %lf, dt_increase_factor_dbl = %lf, dt_decrease_factor_dbl = %lf\n",
+  //if (M2_numericalAlgebraicGeometryTrace>1) printf("epsilon2 = %e, t_step = %lf, dt_min_dbl = %lf, dt_increase_factor_dbl = %lf, dt_decrease_factor_dbl = %lf\n",
   //            epsilon2, t_step, dt_min_dbl, dt_increase_factor_dbl, dt_decrease_factor_dbl);
 
 
@@ -1966,7 +1947,7 @@ int PathTracker::track(const Matrix* start_sols)
   complexAP* c = s_sols;
   for(i=0; i<n_sols; i++)
     for(j=0; j<n; j++,c++)
-      *c = complexAP(BIGCC_VAL(start_sols->elem(i,j)));
+      *c = complexAP(toBigComplex(C,start_sols->elem(i,j)));
 
   Solution* t_s = raw_solutions; //current target solution
   complexAP* s_s = s_sols; //current start solution
@@ -2170,7 +2151,7 @@ int PathTracker::track(const Matrix* start_sols)
     //evaluate_slpHxH(n,x0t0,HxH);
     //cond_number_via_svd(n, HxH/*Hx*/, t_s->cond);
     t_s->num_steps = count;
-    if (M2_gbTrace>0) {
+    if (M2_numericalAlgebraicGeometryTrace>0) {
       if (sol_n%50==0) printf("\n");
       switch (t_s->status) {
       case REGULAR: printf("."); break;
@@ -2182,7 +2163,7 @@ int PathTracker::track(const Matrix* start_sols)
       fflush(stdout);
     }
   }
-  if (M2_gbTrace>0) printf("\n");
+  if (M2_numericalAlgebraicGeometryTrace>0) printf("\n");
 
 
   // clear arrays
@@ -2207,7 +2188,7 @@ Matrix /* or null */* PathTracker::refine(const Matrix *sols, gmp_RR tolerance, 
 {
   double epsilon2 = mpfr_get_d(tolerance,GMP_RNDN); epsilon2 *= epsilon2;
   int n = n_coords;
-  if (! sols->get_ring()->is_CCC()) {
+  if (!cast_to_CCC(sols->get_ring())) {
     ERROR("complex coordinates expected");
     return NULL;
   }
@@ -2231,7 +2212,7 @@ Matrix /* or null */* PathTracker::refine(const Matrix *sols, gmp_RR tolerance, 
   complex* c = s_sols;
   for(i=0; i<n_sols; i++)
     for(j=0; j<n; j++,c++)
-      *c = complex(BIGCC_VAL(sols->elem(i,j)));
+      *c = complex(toBigComplex(C,sols->elem(i,j)));
 
   complex* s_s = s_sols; //current solution
   for(int sol_n =0; sol_n<n_sols; sol_n++, s_s+=n) {
@@ -2269,9 +2250,12 @@ Matrix /* or null */* PathTracker::refine(const Matrix *sols, gmp_RR tolerance, 
   c = s_sols;
   for(i=0; i<n_sols; i++)
     for(j=0; j<n; j++,c++) {
-      mpfr_set_d(re, c->getreal(), GMP_RNDN);
-      mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
-      ring_elem e = C->from_BigReals(re,im);
+
+      //mpfr_set_d(re, c->getreal(), GMP_RNDN);
+      //mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
+      //ring_elem e = from_BigReals(C,re,im);
+      ring_elem e = from_doubles(C,c->getreal(),c->getimaginary());
+
       mat.set_entry(i,j,e);
     }
   mpfr_clear(re); mpfr_clear(im);
@@ -2297,9 +2281,12 @@ Matrix /* or null */* PathTracker::getSolution(int solN)
   Solution* s = raw_solutions+solN;
   complex* c = s->x;
   for(int j=0; j<n_coords; j++,c++) {
-    mpfr_set_d(re, c->getreal(), GMP_RNDN);
-    mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
-    ring_elem e = C->from_BigReals(re,im);
+    
+    //mpfr_set_d(re, c->getreal(), GMP_RNDN);
+    //mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
+    //ring_elem e = from_BigReals(C,re,im);
+    ring_elem e = from_doubles(C,c->getreal(),c->getimaginary());
+    
     mat.set_entry(0,j,e);
   }
   mpfr_clear(re); mpfr_clear(im);
@@ -2318,9 +2305,12 @@ Matrix /* or null */* PathTracker::getAllSolutions()
   for(int i=0; i<n_sols; i++,s++) {
     complex* c = s->x;
     for(int j=0; j<n_coords; j++,c++) {
-      mpfr_set_d(re, c->getreal(), GMP_RNDN);
-      mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
-      ring_elem e = C->from_BigReals(re,im);
+
+      //mpfr_set_d(re, c->getreal(), GMP_RNDN);
+      //mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
+      //ring_elem e = from_BigReals(C,re,im);
+      ring_elem e = from_doubles(C,c->getreal(),c->getimaginary());
+
       mat.set_entry(i,j,e);
     }
   }
@@ -2370,7 +2360,7 @@ void PathTracker::text_out(buffer& o) const
   complex input[n], output[n*n];
   for(int i=0; i<n; i++) {
     Nterm* t = H->elem(1,i).get_poly();
-    input[i] = complex(BIGCC_VAL(t->coeff));
+    input[i] = complex(toBigComplex(C,t->coeff));
   }
 
   slpHxH->evaluate(n, input, output);

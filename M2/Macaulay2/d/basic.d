@@ -4,7 +4,6 @@ use expr;
 
 header "
   #include \"../e/engine.h\"
-  #include <M2/config.h>
   #ifdef HAVE_PYTHON
     #include <python2.5/Python.h>
   #else
@@ -47,24 +46,21 @@ export hash(e:Expr):int := (
 	       + 1299791 * (int(x.position.line) + 
 		    1299811 * int(x.position.column))))
      is x:RawMonomialCell do int(hash(x.p))
-     is x:RawMonomialOrderingCell do int(Ccode(ulong, "IM2_MonomialOrdering_hash(",x.p,")" ))
-     is x:RawMonoidCell do int(Ccode(ulong, "IM2_Monoid_hash(",x.p,")" ))
-     is x:RawMatrixCell do int(Ccode(int, "IM2_Matrix_hash(",x.p,")" ))
-     is x:RawMutableMatrixCell do int(Ccode(int, "IM2_MutableMatrix_hash(",x.p,")" ))
-     is x:RawStraightLineProgramCell do int(Ccode(int, "rawStraightLineProgramHash(",x.p,")" ))
-     is x:RawPathTrackerCell do int(Ccode(int, "rawPathTrackerHash(",x.p,")" ))
-     is x:RawRingCell do int(Ccode(ulong, "IM2_Ring_hash(",x.p,")" ))
-     is x:RawComputationCell do int(Ccode(ulong, "IM2_GB_hash(",x.p,")" ))
-     is x:RawFreeModuleCell do (
-	  0
-	  -- int(Ccode(ulong, "IM2_FreeModule_hash(",x.p,")" ))
-	  )
-     is x:RawRingMapCell do (
-	  0
-	  -- int(Ccode(ulong, "IM2_RingMap_hash(",x.p,")" ))
-	  )
-     is x:RawRingElementCell do 12345
-     is x:RawMonomialIdealCell do 12346
+     is x:RawMonomialOrderingCell do int(Ccode(uint, "rawMonomialOrderingHash(",x.p,")" ))
+     is x:RawMonoidCell do int(Ccode(uint, "rawMonoidHash(",x.p,")" ))
+     is x:RawMatrixCell do int(Ccode(uint, "rawMatrixHash(",x.p,")" ))
+     is x:RawMutableMatrixCell do int(Ccode(uint, "rawMutableMatrixHash(",x.p,")" ))
+     is x:RawHomotopyCell do int(Ccode(uint, "rawHomotopyHash(",x.p,")" ))
+     is x:RawSLEvaluatorCell do int(Ccode(uint, "rawSLEvaluatorHash(",x.p,")" ))
+     is x:RawSLProgramCell do int(Ccode(uint, "rawSLProgramHash(",x.p,")" ))
+     is x:RawStraightLineProgramCell do int(Ccode(uint, "rawStraightLineProgramHash(",x.p,")" ))
+     is x:RawPathTrackerCell do int(Ccode(uint, "rawPathTrackerHash(",x.p,")" ))
+     is x:RawRingCell do int(Ccode(uint, "rawRingHash(",x.p,")" ))
+     is x:RawComputationCell do int(Ccode(uint, "rawComputationHash(",x.p,")" ))
+     is x:RawFreeModuleCell do int(Ccode(uint, "rawFreeModuleHash(",x.p,")" ))
+     is x:RawRingMapCell do int(Ccode(uint, "rawRingMapHash(",x.p,")" ))
+     is x:RawRingElementCell do int(Ccode(uint, "rawRingElementHash(",x.p,")" ))
+     is x:RawMonomialIdealCell do int(Ccode(uint, "rawMonomialIdealHash(",x.p,")" ))
      is s:SpecialExpr do s.Class.hash + 221 * hash(s.e)
      is x:CompiledFunction do x.hash
      is x:CompiledFunctionClosure do x.hash
@@ -80,8 +76,8 @@ export hash(x:List):int := (
      h := x.Class.hash + 23407;
      foreach y in x.v do h = h * 1299833 + hash(y);
      h);
-export sethash(x:List,mutable:bool):List := (
-     if mutable 
+export sethash(x:List,is_mutable:bool):List := (
+     if is_mutable 
      then (
 	  x.Mutable = true;
 	  x.hash = nextHash();
@@ -111,18 +107,18 @@ export list(a:Sequence):Expr := (
      r := List(listClass,a,0,false);
      r.hash = hash(r);
      Expr(r));     
-export list(class:HashTable,a:Sequence):Expr := (
-     r := List(class,a,0,false);
+export list(classs:HashTable,a:Sequence):Expr := (
+     r := List(classs,a,0,false);
      r.hash = hash(r);
      Expr(r));     
-export list(class:HashTable,a:Sequence,mutable:bool):Expr := (
-     r := List(class,a,0,mutable);
+export list(classs:HashTable,a:Sequence,is_mutable:bool):Expr := (
+     r := List(classs,a,0,is_mutable);
      r.hash = hash(r);
      Expr(r));     
-export list(class:HashTable,e:Expr):Expr := (
+export list(classs:HashTable,e:Expr):Expr := (
      when e
-     is a:Sequence do list(class,a)
-     else list(class,Sequence(e)));
+     is a:Sequence do list(classs,a)
+     else list(classs,Sequence(e)));
 export emptyList := list(Sequence());
 export list():Expr := emptyList;
 export list(e:Expr):Expr := list(Sequence(e));

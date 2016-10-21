@@ -8,7 +8,7 @@
 extern ring_elem hilb(const Matrix &M, const Ring *RR);
 
 gb_emitter::gb_emitter(const Matrix *m)
-  : gens(m), g(NULL), n_left(m->n_cols()), n_i(0), n_in_degree(-1)
+  : gens(m), g(NULL), n_left(m->n_cols()), n_i(0)
 {
   originalR = m->get_ring()->cast_to_PolynomialRing();
   assert(originalR != 0);
@@ -179,7 +179,7 @@ gbres_comp::gbres_comp(const Matrix *m, int length, int origsyz,
   //nodes[0]->set_HF(hf);
 }
 
-void gbres_comp::remove_res()
+gbres_comp::~gbres_comp()
 {
   for (int i=0; i<n_nodes; i++)
     {
@@ -188,11 +188,6 @@ void gbres_comp::remove_res()
     }
 
   delete mi_stash;
-}
-
-gbres_comp::~gbres_comp()
-{
-  remove_res();
 }
 
 
@@ -408,6 +403,11 @@ M2_arrayint gbres_comp::get_betti(int type) const
 {
   if (type == 0)
     return betti_minimal();
+  if (type == 4)
+    {
+      ERROR("cannot use Minimize=>true unless res(...,FastNonminimal=>true) was used");
+      return 0;
+    }
 
   ERROR("received unsupported betti type for this algorithm");
   return 0;

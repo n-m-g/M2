@@ -6,14 +6,10 @@
 #include <gmp.h>
 
 #include <M2/config.h>
-
-#ifdef NDEBUG
-#define GC_IGNORE_WARN
-#endif
+/* these two macros affect GC_INIT below */
 #define GC_FREE_SPACE_DIVISOR 12
 #define GC_INITIAL_HEAP_SIZE 70000000
-#include <gc/gc.h>
-
+#include <M2/gc-include.h>
 #include <string.h>
 #include "M2inits.h"
 #include "M2mem.h"
@@ -35,14 +31,14 @@ static void init_gc(void) {
 void *malloc_function (size_t new) {
      void *p = malloc(new);
      if (p == NULL) outofmem2(new);
-#    ifdef DEBUG
+#    ifndef NDEBUG
      trapchk(p);
 #    endif
      return p;
      }
 
 void free_function (void *s, size_t old) {
-#    ifdef DEBUG
+#    ifndef NDEBUG
      trapchk(s);
 #    endif
      free(s);
@@ -53,7 +49,7 @@ void *realloc_function (void *s, size_t old, size_t new) {
      if (p == NULL) outofmem2(new);
      memcpy(p, s, old<new ? old : new);
      free(s);
-#    ifdef DEBUG
+#    ifndef NDEBUG
      trapchk(p);
 #    endif
      return p;
@@ -70,20 +66,37 @@ void enterM2(void) {
     }
     initializeGMP_Cwrapper(); /* this calls factory's initializeGMP() in factory/initgmp.cc, which will call __gmp_set_memory_functions just once */
   }
+#if 1
+  /* Instead of calling __gmp_set_memory_functions we set the values ourselves.  That way we can
+     patch mpir so the function __gmp_set_memory_functions does nothing, leaving us in control, even though
+     pari calls it, for example. */
+  __gmp_allocate_func = (void *(*) (size_t)) getmem_atomic;
+  __gmp_reallocate_func = (void *(*) (void *, size_t, size_t)) getmoremem_atomic;
+  __gmp_free_func = freememlen;
+#else
   __gmp_set_memory_functions ( /* tell gmp to use gc for memory allocation, with our error messages */
 				/* this function is located in mpir-1.2.1/mp_set_fns.c */
      (void *(*) (size_t)) getmem_atomic,
      (void *(*) (void *, size_t, size_t)) getmoremem_atomic,
      freememlen
      );
+#endif
   assert(__gmp_allocate_func == (void *(*) (size_t))getmem_atomic); /* check that __gmp_allocate_func did what we thought */
 }
+
+void check_M2init() {
+     /* Here we provide a way to check, periodically, that no code has overridden our setting. */
+     if (!(__gmp_allocate_func == (void *(*) (size_t))getmem_atomic)) {
+	  fprintf(stderr,"__gmp_allocate_func reset somehow\n");
+	  abort();
+	  }
+     }
 
 void M2inits(void) {
   static int done = 0;
   if (!done) {
     done = 1;
-#   ifdef DEBUG
+#   ifndef NDEBUG
     trap();			/* we call trap() once so variables (such as trapset) can be set */
 #   endif
     init_gc();
