@@ -533,7 +533,6 @@ netPage(Page,List,List) := (E,mins,maxs) -> (
     finalmaxP := min {newmaxP,maxP};
     finalminP := max {newminP,minP}; 
     K := while finalmaxQ >= finalminQ list makeRow(finalmaxP, finalminP, finalmaxQ, P) do (finalmaxQ = finalmaxQ - 1);
-   -- netList(K, Boxes => false)
    netList K
     )
 
@@ -544,7 +543,6 @@ net Page := E -> (
     maxP := max(apply(L, i -> i#0));
     minP := min(apply(L,i -> i#0));
     K := while maxQ >= minQ list makeRow(maxP, minP, maxQ, E) do maxQ = maxQ - 1;
-   -- netList(K, Boxes => false)
    netList K
     )
 
