@@ -266,10 +266,6 @@ net FilteredComplex := K -> (
 -- of subcomplexes of a chain complex (or simplicial complexes) 
 -- and produces a filtered complex with integer keys the
 -- corresponding chain complex.
--- If F_0C is not zero then by default F_(-1)C is added and is 0.
--- THIS IS THE CONVENTION WE WANT BY DEFAULT.  SEE 
--- THE HOPF FIBRATION EXAMPLE.  TO GET THE CORRECT INDICIES ON THE E2 PAGE
--- WE WANT THE ZERO COMPLEX TO HAVE "FILTRATION DEGREE -1".
 filteredComplex = method(Options => {
     Shift => 0,
     ReducedHomology => true})
@@ -582,8 +578,6 @@ page(List,List,Page) := Page => opts -> (L,M,E) -> (
     maxP := L#1;
     minQ := M#0;
     maxQ := M#1;
-  --  E := new Page;
-  --  E.ring = A;
     for i from minP to maxP do (
 	for j from minQ to maxQ do (
 	    E#{i,j} = (E.ring)^0;
@@ -1153,9 +1147,6 @@ doc ///
 	      Here are some higher pages of the associated spectral sequence:
 	 Example
 	       E = prune spectralSequence K
---	       E^2
---	       E^3
---	       E^3 .dd
 	       E^4
 	       E^4 .dd
 ///
@@ -3082,7 +3073,6 @@ doc ///
 doc ///
      Key
      	  (spectralSequence, FilteredComplex)
-	 -- spectralSequence
      Headline
      	  construct a spectral sequence from a filtered complex
      Usage
@@ -3154,7 +3144,6 @@ doc ///
 doc ///
      Key
      	  (spectralSequencePage, FilteredComplex, ZZ)
-	 -- spectralSequencePage
      Headline
      	  construct a spectral sequence page from a filtered complex
      Usage
@@ -3795,10 +3784,6 @@ doc ///
 	       
 ///
    
---doc ///
---     Key
---          associatedGradedHomologyObject     	  
---///   
    	       
 doc ///
      Key  
@@ -4009,7 +3994,6 @@ doc ///
 	      rank image E^2 .dd_{2,-1}     
 ///     
 
--- We might want to not include this next example
 doc ///
      Key
      	  "Example 2"
